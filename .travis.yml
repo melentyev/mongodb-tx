@@ -1,0 +1,16 @@
+language: node_js
+
+node_js:
+  - "node"
+  - "7"
+
+before_script:
+  - sleep 10
+
+services:
+  - mongodb
+  - redis-server
+
+cache:
+  directories:
+    - node_modules

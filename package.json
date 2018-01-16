@@ -4,7 +4,8 @@
   "description": "Transaction library for MongoDB, focused on isolation.",
   "scripts": {
     "build": "tsc",
-    "test": "nyc ava dist/test/test-account.js dist/test/test-high-concurrency.js && nyc report --reporter=html",
+    "test": "npm run build && ava dist/test/test-account.js",
+    "test-local": "nyc ava dist/test/test-account.js dist/test/test-high-concurrency.js && nyc report --reporter=html",
     "watch": "tsc -w"
   },
   "main": "dist/lib/index.js",

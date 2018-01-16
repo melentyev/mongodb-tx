@@ -3,7 +3,6 @@ import * as mongoose from "mongoose";
 import {TransactionManager} from "../lib/index";
 import {initTestDb} from "./utils";
 
-process.env.DB_CONNECTION_STRING = process.env.DB_CONNECTION_STRING || `mongodb://localhost:27019/KMTESTTX-ACCOUNT`;
 async function main() {
     const {models, conn} = await initTestDb(process.env.DB_CONNECTION_STRING);
 

@@ -8,8 +8,6 @@ import {
     transferFundsPreLock,
 } from "./utils";
 
-process.env.DB_CONNECTION_STRING = process.env.DB_CONNECTION_STRING || `mongodb://localhost:27019/KMTESTTX-ACCOUNT`;
-
 let models: IModels;
 let mongoTx: TransactionManager;
 let mongoTxLocalLock: TransactionManager;
@@ -154,7 +152,7 @@ async function testCreateOrder(t, doThrow, expected) {
 test.serial("test-create", testCreateOrder, false, 1);
 test.serial("test-create-rollback", testCreateOrder, true, 0);
 
-test.serial("test-recovery", async (t) => {
+test.serial.skip("test-recovery", async (t) => {
     const appId = "test-failing-app";
     await runTransactionFailedProcess(appId);
     t.truthy(await models.User.findOne({[mongoTx.getConfig().txFieldName]: {$exists: true}}));

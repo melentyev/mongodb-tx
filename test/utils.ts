@@ -132,12 +132,17 @@ export async function transferFundsPreLock({User}: IModels, mongoTx: Transaction
 }
 
 export function runTransactionFailedProcess(appId: string) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const scriptPath = path.resolve(__dirname, "failed-process.js");
-        execFile("node", [scriptPath],
-            {env: {TX_FAIL_APP_ID: appId}},
+        const nodeExecutable = process.env.NVM_BIN ? `${process.env.NVM_BIN}/node` :
+            (process.env.NODE_EXECUTABLE || "node");
+        execFile(nodeExecutable, [scriptPath],
+            {env: {TX_FAIL_APP_ID: appId, DB_CONNECTION_STRING: process.env.DB_CONNECTION_STRING}},
             (error, stdout, stderr) => {
-                // console.log("execFile", error, stdout);
+                if (error) {
+                    console.log("execFile", error);
+                    reject(error);
+                }
                 resolve();
             });
     });
