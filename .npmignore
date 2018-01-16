@@ -1,0 +1,8 @@
+tsconfig.json
+lib
+examples
+test
+dist/test
+dist/examples
+dc.dev
+trash

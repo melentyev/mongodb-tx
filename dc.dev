@@ -1,0 +1,31 @@
+version: '3'
+services:
+  mongo-a:
+    image: mongo
+    ports: ["27019:27017"]
+
+  postgres-a:
+    image: postgres:10.1-alpine
+    command: ["-cmax_prepared_transactions=100"]
+    ports: ["5432:5432"]
+    environment:
+     # password for dev only
+      - "POSTGRES_PASSWORD=xk1da91sd4Mash12asdjhHasd"
+      - "POSTGRES_DB=testtx"
+
+  #mongo-b:
+  #  image: mongo
+  #  ports: ["27020:27017"]
+  mongo-express:
+    image: mongo-express
+    ports: ["8081:8081"]
+    depends_on: [mongo-a]
+    environment:
+      - "ME_CONFIG_MONGODB_SERVER=mongo-a"
+      - "ME_CONFIG_MONGODB_PORT=27017"
+
+  adminer:
+    image:   adminer:latest
+    restart: always
+    depends_on: [postgres-a]
+    ports:   ["8082:8080"]
