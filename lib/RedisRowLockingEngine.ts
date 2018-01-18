@@ -7,18 +7,25 @@ export class RedisRowLockingEngine implements IRowLockingEngine {
     private clients: RedisClient[] = [];
     private writer: RedisClient;
     constructor() {
-        for (let i = 0; i < 5; i++) {
+        this.writer = this.createRedisClient();
+        for (let i = 0; i < 30; i++) {
             this.clients.push(this.createRedisClient());
         }
     }
     public async acquire(name: string, lockWaitTimeout = 2) {
         const client = this.acquireRedisClient();
-        const res = await promisify(client.blpop)(this.formatKey(name), lockWaitTimeout);
+        const res = await promisify(client.blpop, {thisArg: client})(this.formatKey(name), lockWaitTimeout);
+        // console.log(`ACQUIRED ${name} ${res ? res[1] : null}`);
         this.releaseRedisClient(client);
         return !!res;
     }
     public async release(name: string) {
-        await promisify(this.writer.rpush)(this.formatKey(name), "1");
+        const key = this.formatKey(name);
+        const token = "1"; // `${100 + Math.ceil(Math.random() * 200)}`;
+        const multi = this.writer.batch().del(key).rpush(key, token).expire(key, 3);
+        // console.log(`REL_     ${name} ${token}`);
+        await promisify(multi.exec, {thisArg: multi})();
+        // console.log(`RELEASED ${name} ${token}`);
     }
     private releaseRedisClient(client: RedisClient) {
         this.clients.push(client);
@@ -30,7 +37,7 @@ export class RedisRowLockingEngine implements IRowLockingEngine {
         else { return this.createRedisClient(); }
     }
     private createRedisClient(): RedisClient {
-        return redis.createClient() as any as RedisClient;
+        return redis.createClient();
     }
     private formatKey(name: string) {
         return `mtx:${name}`;

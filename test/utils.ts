@@ -60,10 +60,6 @@ export async function makeOrder({User, Product, Order}: IModels, mongoTx: Transa
                                 userId: string, productIds: string[], sum: number)
 {
     await mongoTx.transaction(async (t) => {
-        t.locks.declare(User, {_id: userId, balance: {$gte: sum}});
-        productIds.forEach((_id) => t.locks.declare(Product, {_id}));
-        await t.locks.save();
-
         const user = await t.findOneForUpdate(User, {_id: userId, balance: {$gte: sum}});
 
         if (!user || user.balance < sum) {
@@ -74,11 +70,9 @@ export async function makeOrder({User, Product, Order}: IModels, mongoTx: Transa
             throw new Error("NOT_ENOUGH_PRODUCT_QTY");
         }
 
-        await t.all([
-            t.update(User, {_id: userId}, {$inc: {balance: -sum}}),
-            ...productIds.map((_id) => t.update(Product, {_id}, {$inc: {qty: -1}})),
-            t.create(Order, {userId, productIds}),
-        ]);
+        t.update(User, {_id: userId}, {$inc: {balance: -sum}});
+        productIds.forEach((_id) => t.update(Product, {_id}, {$inc: {qty: -1}}));
+        t.create(Order, {userId, productIds});
     });
 }
 

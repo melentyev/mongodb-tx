@@ -2,7 +2,7 @@ import * as _ from "lodash";
 import * as mongoose from "mongoose";
 
 import {IRowLockingEngine} from "./IRowLockingEngine";
-import {Transaction, TxPrepareFailedError} from "./Transaction";
+import {Transaction, TxLockTimeoutError, TxPrepareFailedError} from "./Transaction";
 
 export class TxUnknownModelError extends Error {
     constructor() { super("TX_UNKNOWN_MODEL_ERROR"); }
@@ -28,6 +28,7 @@ export enum TransactionStepType {
 export interface IStepDescription {
     m: string;
     c: any;
+    e: any;
     t: TransactionStepType;
     upd: any;
 }
@@ -89,10 +90,10 @@ export class TransactionEngine {
         // TODO consider: failed to create transaction object
         const t = new Transaction(this, tx);
         try {
-            const res = await body(t);
+            await body(t);
+            await this._pending(t);
             if (xaId) { await this._prepare(t, xaId); }
             else { await this._commit(t, [TransactionState.CREATED, TransactionState.COMMITED]); }
-            return res;
         }
         catch (err) {
             // TODO consider: what we can do if rollback failed?
@@ -189,6 +190,54 @@ export class TransactionEngine {
         return cnt;
     }
 
+    public async findOneForUpdate(tx: ITransactionInstance, model: mongoose.Model<any>,
+                                  modelName: string, cond, {returnDoc = true} = {})
+    {
+        const startAtTimestamp = new Date().getTime();
+        const updCond = {...cond, $or: [{[this.txFieldName]: null}, {[this.txFieldName]: tx._id}]};
+        const upd = {[this.txFieldName]: tx._id};
+        const createdTimestamp = tx.createdAt.getTime();
+        while (!this._timeoutReached(createdTimestamp) && !this._timeoutReached(startAtTimestamp)) {
+            if (returnDoc) {
+                const updDoc = await model.findOneAndUpdate(updCond, upd, {new: true});
+                if (updDoc) { return updDoc; }
+            }
+            else {
+                const updRes = await model.update(updCond, upd, {multi: false});
+                if (_.get(updRes, "n")) { return true; }
+            }
+
+            // Failed to acquire lock? Let's check if locked document exists
+            const doc: any[] = await model.find(cond).select("_id").limit(1).lean(true) as any;
+            if (!doc.length) {
+                return null;
+            }
+            // Doc exists, therefore we must wait for unlock signal (some other transaction locked the doc)
+            await this.rle.acquire(`${modelName}:${doc[0]._id}`, Math.ceil(this.lockWaitTimeout / 10000));
+        }
+        throw new TxLockTimeoutError();
+    }
+
+    private async _pending(t: Transaction) {
+        await t.persistQueue();
+        for (const step of t.tx.sq) {
+            const model = this.getModel<any>(step.m);
+            if (step.t === TransactionStepType.UPDATE || step.t === TransactionStepType.REMOVE) {
+                const cond = this.decode(step.c);
+                const updated = await this.findOneForUpdate(t.tx, model, step.m, cond, {returnDoc: false});
+                if (step.e && !updated) { throw new Error("FAILED"); } // TODO error
+            }
+            else if (step.t === TransactionStepType.INSERT) {
+                const cond = this.decode(step.c);
+                const upd = this.decode(step.upd);
+                await model.create({...cond, ...upd, [this.txFieldName]: t.getId()});
+            }
+        }
+    }
+    private _timeoutReached(fromTS: number) {
+        return (new Date().getTime() - fromTS > this.lockWaitTimeout);
+    }
+
     private async _prepare(t: Transaction, xaId: string) {
         const txId = t.getId();
         await this.txModel.findOneAndUpdate(
@@ -238,8 +287,13 @@ export class TransactionEngine {
         for (const step of _.reverse(tx.locks)) {
             const model = this.getModel<any>(step.m);
             const cond = this.decode(step.c);
-            await model.update(
-                {...cond, [this.txFieldName]: txId}, {$unset: {[this.txFieldName]: ""}});
+            const updatedDoc = await model.findOneAndUpdate(
+                {...cond, [this.txFieldName]: txId},
+                {$unset: {[this.txFieldName]: ""}},
+                {new: true});
+            if (updatedDoc) {
+                await this.rle.release(`${model.modelName}:${updatedDoc["_id"]}`);
+            }
         }
         await this.txModel.remove({_id: txId});
     }

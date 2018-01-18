@@ -13,7 +13,7 @@ interface ICommentDoc extends mongoose.Document {
 
 async function prepare() {
     process.on("unhandledRejection", (err) => console.error(err));
-    await mongoose.connect(process.env.DB_CONNECTION_STRING);
+    await mongoose.connect(`${process.env.DB_CONNECTION_STRING}/TESTTX1`);
     const txMgr = new TransactionManager({mongoose});
 
     const Comment = mongoose.model<ICommentDoc>("Comment", new mongoose.Schema({

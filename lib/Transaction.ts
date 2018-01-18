@@ -1,7 +1,7 @@
 import * as _ from "lodash";
 import * as mongoose from "mongoose";
 import {
-    ILockDefinition, ITransactionInstance, TransactionEngine, TransactionState,
+    ILockDefinition, IStepDescription, ITransactionInstance, TransactionEngine, TransactionState,
     TransactionStepType,
 } from "./TransactionEngine";
 
@@ -45,11 +45,15 @@ export class TransactionLocks {
     }
 }
 
+export interface IUpdateRemoveOptions {
+    throwIfMissing?: string;
+}
+
 export class Transaction {
     public locks: TransactionLocks;
-
     private txFieldName: string;
     private fetchedDocModels = [];
+    private queue: IStepDescription[] = [];
 
     constructor(private manager: TransactionEngine, public tx: ITransactionInstance) {
         this.txFieldName = this.manager.txFieldName;
@@ -82,49 +86,39 @@ export class Transaction {
         return results;
     }
 
-    public update(modelOrName: string|mongoose.Model<any>, cond, upd);
-    public update(doc: mongoose.Document, upd);
-    public async update(modelOrNameOrDoc: string|mongoose.Model<any>|mongoose.Document, condOrUpd, upd?) {
+    public update(modelOrName: string|mongoose.Model<any>, cond, upd, opts?: IUpdateRemoveOptions): void;
+    public update(doc: mongoose.Document, upd, opts?: IUpdateRemoveOptions): void;
+    public update(modelOrNameOrDoc: string|mongoose.Model<any>|mongoose.Document, condOrUpd, updOrOpts?, opts?): void {
         if (typeof modelOrNameOrDoc === "string" || modelOrNameOrDoc["modelName"]) {
             const model = this.manager.getModel(modelOrNameOrDoc as string|mongoose.Model<any>);
-            const modelName = model.modelName;
-            const cond = condOrUpd;
-            await this._step(cond, TransactionStepType.UPDATE, modelName, upd);
-            if (!this.locks.isSet(modelName, cond)) {
-                await this.findOneForUpdate(modelName, cond);
-            }
+            this._stepLocal(condOrUpd, TransactionStepType.UPDATE, model.modelName, updOrOpts, opts);
         }
         else {
             const found = this.fetchedDocModels.find((x) => x.doc === modelOrNameOrDoc);
             // TODO consider if not found
-            await this._step(found.cond, TransactionStepType.UPDATE, found.modelName, condOrUpd);
+            this._stepLocal(found.cond, TransactionStepType.UPDATE, found.modelName, condOrUpd, updOrOpts);
         }
     }
 
-    public async create(modelOrName: string|mongoose.Model<any>, vals) {
-        const model = this.manager.getModel(modelOrName);
+    public create<T extends mongoose.Document>(modelOrName: string|mongoose.Model<any>, vals): T {
+        const model = this.manager.getModel<T>(modelOrName);
         const entity = new model({...vals, [this.txFieldName]: this.getId()});
 
-        await this._step({_id: `${entity._id}`}, TransactionStepType.INSERT, model.modelName);
-        await entity.save();
+        this._stepLocal({_id: `${entity._id}`}, TransactionStepType.INSERT, model.modelName, vals);
         return entity;
     }
 
-    public remove(modelOrName: string|mongoose.Model<any>, cond);
-    public remove(doc: mongoose.Document);
-    public async remove(modelOrNameOrDoc: string|mongoose.Model<any>|mongoose.Document, cond?) {
+    public remove(modelOrName: string|mongoose.Model<any>, cond, opts?: IUpdateRemoveOptions);
+    public remove(doc: mongoose.Document, opts?: IUpdateRemoveOptions);
+    public remove(modelOrNameOrDoc: string|mongoose.Model<any>|mongoose.Document, condOrOpts?, opts?) {
         if (typeof modelOrNameOrDoc === "string" || modelOrNameOrDoc["modelName"]) {
             const model = this.manager.getModel(modelOrNameOrDoc as string|mongoose.Model<any>);
-            const modelName = model.modelName;
-            await this._step(cond, TransactionStepType.REMOVE, modelName);
-            if (!this.locks.isSet(modelName, cond)) {
-                await this.findOneForUpdate(modelName, cond);
-            }
+            this._stepLocal(condOrOpts, TransactionStepType.REMOVE, model.modelName, undefined, opts);
         }
         else {
             const found = this.fetchedDocModels.find((x) => x.doc === modelOrNameOrDoc);
             // TODO consider if not found
-            await this._step(found.cond, TransactionStepType.REMOVE, found.modelName);
+            this._stepLocal(found.cond, TransactionStepType.REMOVE, found.modelName, undefined, condOrOpts);
         }
     }
 
@@ -134,50 +128,35 @@ export class Transaction {
         const model = this.manager.getModel(modelOrName);
         const modelName = model.modelName;
 
-        if (!this.locks.isSet(model.modelName, cond)) {
-            await this._stepLock(model.modelName, cond);
+        if (!this.locks.isSet(modelName, cond)) {
+            await this._stepLock(modelName, cond);
         }
 
-        const startAt = new Date().getTime();
-
-        while (!this._timeoutReached() && !this._timeoutReached(startAt)) {
-            const updDoc = await model.findOneAndUpdate(
-                {...cond, $or: [{[this.txFieldName]: null}, {[this.txFieldName]: this.getId()}]},
-                {[this.txFieldName]: this.getId()}, {new: true});
-
-            if (updDoc) {
-                this.fetchedDocModels.push({doc: updDoc, modelName, cond});
-                return updDoc;
-            }
-            else {
-                // Failed to acquire lock? Let's check if locked document exists
-                const doc: any[] = await model.find(cond).select("_id").limit(1).lean(true) as any;
-                if (!doc.length) {
-                    return null;
-                }
-                // LOCK_COLLISIONS++;
-                await this.manager.rle.acquire(`${modelName}:${doc[0]._id}`,
-                    Math.ceil(this.manager.lockWaitTimeout / 10000));
-            }
-        }
-        throw new TxLockTimeoutError();
+        const doc = await this.manager.findOneForUpdate(this.tx, model, modelName, cond);
+        this.fetchedDocModels.push({doc, modelName, cond});
+        return doc;
     }
 
-    private _timeoutReached(fromTS?: number) {
-        fromTS = fromTS || this.tx.createdAt.getTime();
-        return (new Date().getTime() - fromTS > this.manager.lockWaitTimeout);
+    public async persistQueue() {
+        this.tx = await this.manager.txModel.findOneAndUpdate({_id: this.getId()},
+            {$push: {sq: {$each: this.queue}}, updatedAt: new Date()},
+            {new: true});
+        this.queue = null;
     }
 
     private _stepLock(collection: string, cond: any) {
         // TODO update locks object
-        return this.manager.txModel.update({_id: this.getId()},
-            {$push: {locks: {m: collection, c: this.manager.encode(cond)}}, updatedAt: new Date()});
+        return this.manager.txModel.findOneAndUpdate({_id: this.getId()},
+            {$push: {locks: {m: collection, c: this.manager.encode(cond)}}, updatedAt: new Date()},
+            {new: true});
     }
-    private _step(cond: any, t: TransactionStepType, collection: string, upd?: any) {
-        return this.manager.txModel.update(
-            {_id: this.getId()}, {
-                $push: {sq: {c: this.manager.encode(cond), t, m: collection, upd: this.manager.encode(upd) }},
-                updatedAt: new Date(),
-            });
+    private _stepLocal(cond: any, t: TransactionStepType, collection: string, upd?: any, opts?: IUpdateRemoveOptions) {
+        return this.queue.push({
+            t,
+            m: collection,
+            c: this.manager.encode(cond),
+            upd: this.manager.encode(upd),
+            e: opts,
+        });
     }
 }

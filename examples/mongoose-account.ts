@@ -7,7 +7,7 @@ interface IUserDoc extends mongoose.Document {
 }
 
 (async () => {
-    await mongoose.connect(process.env.DB_CONNECTION_STRING);
+    await mongoose.connect(`${process.env.DB_CONNECTION_STRING}/TESTTX1`);
     const txMgr = new TransactionManager({mongoose});
 
     // define "User" model and prepare test DB data

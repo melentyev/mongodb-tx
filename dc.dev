@@ -4,6 +4,10 @@ services:
     image: mongo
     ports: ["27019:27017"]
 
+  redis:
+    image: redis:alpine
+    ports: ["6379:6379"]
+
   postgres-a:
     image: postgres:10.1-alpine
     command: ["-cmax_prepared_transactions=100"]

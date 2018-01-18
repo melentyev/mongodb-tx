@@ -15,12 +15,12 @@ let conn: mongoose.Connection;
 let mongooseDefault;
 
 test.before(async (t) => {
-    const initRes = await initTestDb(process.env.DB_CONNECTION_STRING);
+    const initRes = await initTestDb(`${process.env.DB_CONNECTION_STRING}/KMTESTTX-ACCOUNT`);
     models = initRes.models;
     mongoTx = initRes.mongoTx;
     mongoTxLocalLock = initRes.mongoTxLocalLock;
     conn = initRes.conn;
-    mongooseDefault = await initMongooseDefault(process.env.DB_CONNECTION_STRING);
+    mongooseDefault = await initMongooseDefault(`${process.env.DB_CONNECTION_STRING}/KMTESTTX-ACCOUNT`);
 });
 
 test.beforeEach(async (t) => { await testFillDb(models, mongoTx); });
@@ -112,16 +112,19 @@ test.serial("test-account-concurrent-pre-lock-3-error", async (t) => {
 });
 
 test.serial("test-remove-rollback-remove", async (t) => {
-    const error = await t.throws(mongoTx.transaction(async (tx) => {
+    await mongoTx.transaction(async (tx) => {
+        const u = await tx.findOneForUpdate(models.User, {name: "user1"});
+        tx.remove(u);
+    });
+    await t.throws(mongoTx.transaction(async (tx) => {
         await tx.findOneForUpdate(models.User, {name: "user2"});
-        await tx.remove(models.User, {name: "user2"});
-        const removedUser = await models.User.findOne({name: "user2"});
-        t.is(`${removedUser[mongoTx.getConfig().txFieldName]}`, `${tx.getId()}`);
+        tx.remove(models.User, {name: "user2"});
         throw new Error("ROLLBACK");
     }));
+    t.truthy(await models.User.findOne({name: "user2"}));
     await mongoTx.transaction(async (tx) => {
         await tx.findOneForUpdate(models.User, {name: "user3"});
-        await tx.remove(models.User, {name: "user3"});
+        tx.remove(models.User, {name: "user3"});
     });
 });
 
@@ -141,8 +144,7 @@ async function testCreateOrder(t, doThrow, expected) {
     let orderId;
     try {
         await mongoTx.transaction(async (tx) => {
-            orderId = (await tx.create(models.Order, {}))._id;
-            t.truthy(await models.Order.findOne({_id: orderId}));
+            orderId = tx.create(models.Order, {})._id;
             if (doThrow) { throw new Error("ROLLBACK"); }
         });
     } catch (err) {}
@@ -152,7 +154,7 @@ async function testCreateOrder(t, doThrow, expected) {
 test.serial("test-create", testCreateOrder, false, 1);
 test.serial("test-create-rollback", testCreateOrder, true, 0);
 
-test.serial.skip("test-recovery", async (t) => {
+test.serial("test-recovery", async (t) => {
     const appId = "test-failing-app";
     await runTransactionFailedProcess(appId);
     t.truthy(await models.User.findOne({[mongoTx.getConfig().txFieldName]: {$exists: true}}));
@@ -176,7 +178,7 @@ test.serial("test-recovery-timeout", async (t) => {
 test.serial("test-prepared", async (t) => {
     await mongoTx.transactionPrepare("xa1", async (tx) => {
         await tx.findOneForUpdate(models.User, {name: "user1"});
-        await tx.update(models.User, {name: "user1"}, {balance: 12345});
+        tx.update(models.User, {name: "user1"}, {balance: 12345});
         t.truthy(await models.User.findOne({[mongoTx.getConfig().txFieldName]: {$exists: true}}));
     });
     t.truthy(await models.User.findOne({[mongoTx.getConfig().txFieldName]: {$exists: true}}));
@@ -189,7 +191,7 @@ test.serial("test-prepared", async (t) => {
 
     await mongoTx.transactionPrepare("xa2", async (tx) => {
         await tx.findOneForUpdate(models.User, {name: "user1"});
-        await tx.update(models.User, {name: "user1"}, {balance: 1});
+        tx.update(models.User, {name: "user1"}, {balance: 1});
         t.truthy(await models.User.findOne({[mongoTx.getConfig().txFieldName]: {$exists: true}}));
     });
     await mongoTx.rollbackPrepared("xa2");
@@ -212,7 +214,7 @@ test.serial("test-unset", async (t) => {
     t.not((await models.User.findOne({name: "user1"})).balance, undefined);
     await mongoTx.transaction(async (tx) => {
         const u = await tx.findOneForUpdate(models.User, {name: "user1"});
-        await tx.update(u, {$unset: {balance: ""}});
+        tx.update(u, {$unset: {balance: ""}});
     });
     t.is((await models.User.findOne({name: "user1"})).balance, undefined);
 });

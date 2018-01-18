@@ -3,7 +3,7 @@
 This library for Node.js allows you to implement transactional semantics
 for MongoDB at the application level.
 
-The implementation is based on the 2 phase commit algorithm, with particular attention paid to
+The implementation is based on the two-phase commit algorithm, with particular attention paid to
 control of document level locks (similar to row-level locking in RDBMS)
 to provide and manage transaction isolation.
 
@@ -91,6 +91,7 @@ xaTx.state = "COMMITED"; // or just remove xaTx record from storage
     * Customizable document locking 
 - SQL-like findOneForUpdate
 - API for external Transaction Manager
+- TypeScript support
 
 ## <a name="api"></a>API
 TODO api description
@@ -98,6 +99,7 @@ TODO api description
     * [constructor](#TransactionManager-constructor)
     * [protect](#TransactionManager-protect)
     * [transaction](#TransactionManager-transaction)
+    * [recovery](#TransactionManager-recovery)
     * [transactionPrepare](#TransactionManager-transactionPrepare)
     * [commitPrepared](#TransactionManager-commitPrepared)
     * [rollbackPrepared](#TransactionManager-rollbackPrepared)
@@ -111,30 +113,78 @@ TODO api description
 - [DelayRowLockingEngine](#DelayRowLockingEngine)
 
 ### <a name="TransactionManager">TransactionManager
-#### <a name="TransactionManager-constructor">constructor(...)
-#### <a name="TransactionManager-protect">protect(...)
+#### <a name="TransactionManager-constructor">constructor(opts)
+`opts` fields:
+- `mongoose`
+- `mongooseConn`
+- `rowLockEngine`
+- `appId: string` - faster recovery on application restart. See implementation notes.
+
+#### <a name="TransactionManager-protect">protect
+Use this mongoose plugin on models, that will participate in transactions.
+Plugin adds reference to transaction that locks the document. 
+```typescript
+const txMgr = new TransactionManager(...);
+const schema = new mongoose.Schema({name: String}).plugin(txMgr.protect);
+const model = mongoose.model("Sample", schema);
+```
+
 #### <a name="TransactionManager-transaction">transaction(body)
-- `body`
+- `body: (t: Transaction) => Promise<void>|void`
+
+Transaction body is defined as callback function (maybe async). This function can lock and load documents from database using `findOneForUpdate` method, and enqueue modification with `update`, `remove` and `create`.
+```typescript
+// following transactions are equivalent, but the first one is faster 
+await txMgr.transaction((t) => {
+    t.update(User, 
+        {userId, balance: {$gte: sum}}, 
+        {$inc: {balance: -sum}}, 
+        {throwIfMissing: "NOT_ENOUGH_BALANCE"});
+    t.create(Order, {userId, sum});
+});
+await txMgr.transaction(async (t) => {
+    const user = await t.findOneForUpdate(User, {userId});
+    if (!user || user.balance < sum) {
+        throw new Error("NOT_ENOUGH_BALANCE");
+    }
+    t.update(user, {$inc: {balance: -sum}});
+    t.create(Order, {userId, sum});
+});
+```
+#### <a name="TransactionManager-recovery">recovery()
+
 #### <a name="TransactionManager-transactionPrepare">transactionPrepare(xaId, body)
-- `xaId`
-- `body`
+- `xaId: string`
+- `body: (t: Transaction) => Promise<void>|void`
+Prepare transaction for two-phase commit (external). Similar to PostgreSQL `PREPARE TRANSACTION` https://www.postgresql.org/docs/10/static/sql-prepare-transaction.html
 #### <a name="TransactionManager-commitPrepared">commitPrepared(xaId)
-- `xaId`
+- `xaId: string`
 #### <a name="TransactionManager-rollbackPrepared">rollbackPrepared(xaId)
-- `xaId`
+- `xaId: string`
 
 ### <a name="Transaction">Transaction
 #### <a name="Transaction-findOneForUpdate">findOneForUpdate(model, cond)
-- `model`
-- `cond`
-#### <a name="Transaction-create">create(model, values)
-- `model`
+- `model: mongoose.Model`
+- `condition`
+
+Find and set lock on a single document, matching `condition`.
+
+#### <a name="Transaction-create">create(model, values): mongoose.Document
+- `model: mongoose.Model`
 - `values`
+
+Create single document. (operation is enqueued)
+
 #### <a name="Transaction-create">update(doc, updates)
-- `doc`
+- `doc: mongoose.Document`
 - `updates`
+
+Enqueue single document update operation.
+
 #### <a name="Transaction-create">remove(doc)
-- `doc`
+- `doc: mongoose.Document`
+
+Enqueue single document remove operation.
 
 ## <a name="implementation"></a>Implementation notes
 TODO durability considerations, write concern, appId and recovery,

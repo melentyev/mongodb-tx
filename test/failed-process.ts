@@ -4,7 +4,7 @@ import {TransactionManager} from "../lib/index";
 import {initTestDb} from "./utils";
 
 async function main() {
-    const {models, conn} = await initTestDb(process.env.DB_CONNECTION_STRING);
+    const {models, conn} = await initTestDb(`${process.env.DB_CONNECTION_STRING}/KMTESTTX-ACCOUNT`);
 
     const mongoTxFailingApp = new TransactionManager(
         {mongoose, mongooseConn: conn, appId: process.env.TX_FAIL_APP_ID});
