@@ -1,4 +1,4 @@
-# mongodb-tx
+# mongodb-tx [![Build Status](https://travis-ci.org/melentyev/mongodb-tx.svg?branch=master)](https://travis-ci.org/melentyev/mongodb-tx)
 
 This library for Node.js allows you to implement transactional semantics
 for MongoDB at the application level.
