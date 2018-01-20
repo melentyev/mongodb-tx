@@ -4,10 +4,10 @@ This library for Node.js allows you to implement transactional semantics
 for MongoDB at the application level.
 
 The implementation is based on the two-phase commit algorithm, with particular attention paid to
-control of document level locks (similar to row-level locking in RDBMS)
+control of document-level locks (similar to row-level locking in RDBMS)
 to provide and manage transaction isolation.
 
-Work in progress...
+Currently `mongodb-tx` only works with mongoose. Native MongoDB driver support coming soon.
 
 ## Contents
 - [Examples](#examples)
@@ -38,7 +38,7 @@ interface IUserDoc extends mongoose.Document {
     }).plugin(txMgr.protect)); // notice "protect" plugin usage
     txMgr.addModels([User]);
     await User.create({name: "a", balance: 10});
-    await User.create({name: "a", balance: 20});
+    await User.create({name: "b", balance: 20});
 
     await txMgr.transaction(async (t) => {
         const userA = await t.findOneForUpdate(User, {name: "a"});
@@ -46,8 +46,8 @@ interface IUserDoc extends mongoose.Document {
         if (!userA || !userB || userA.balance < 1) {
             throw new Error("conditions not satisfied");
         }
-        await t.update(userA, {balance: {$inc: -1}});
-        await t.update(userB, {balance: {$inc: 1}});
+        t.update(userA, {balance: {$inc: -1}});
+        t.update(userB, {balance: {$inc: 1}});
     });
 })();
 ```
@@ -56,12 +56,11 @@ The library also provides an ability to implement a distributed transaction
 (for example between different DBMS) using an external transaction manager:
 
 ```typescript
-
 const xaTx = {state: "PREPARING", id: "ctx1"}; // must be durably stored
 const userId = 42;
 
 await txMgr.transactionPrepare(xaTx.id, async (t) => {
-    await t.create(Comment, {userId, text: "Hello, World!"});
+    t.create(Comment, {userId, text: "Hello, World!"});
 });
 
 await sequelize.transaction(async (t) => {
@@ -113,12 +112,21 @@ TODO api description
 - [DelayRowLockingEngine](#DelayRowLockingEngine)
 
 ### <a name="TransactionManager">TransactionManager
-#### <a name="TransactionManager-constructor">constructor(opts)
-`opts` fields:
-- `mongoose`
-- `mongooseConn`
-- `rowLockEngine`
-- `appId: string` - faster recovery on application restart. See implementation notes.
+This is the main class, the entry point to `mongodb-tx`.
+#### <a name="TransactionManager-constructor">constructor(config)
+
+Instantiate `TransactionManager` with your configuration.
+Possible`config` fields:
+- `mongoose` - pass your mongoose instance 
+- `mongooseConn (optional)` - pass your mongoose connection instance (if you are using `mongoose.createConnection()`)
+- `rowLockEngine (optional)` - row locking engine instance (see [row locking](#implementation-row-locking) section). Default is [DelayRowLockingEngine](#DelayRowLockingEngine). 
+I recommend to use [RedisRowLockingEngine](#RedisRowLockingEngine) if multiple concurrent 
+transactions updating the same document is frequent situation in your application
+(it's only a performance recommendation).
+
+- `appId: string (optional)` - specify `appId` to apply [recovery](#implementation-recovery) on startup only to application's own transactions.
+- `lockWaitTimeout: number (optional)` 
+- `txFieldName: string (optional)` - (default is `"__m__t"`)
 
 #### <a name="TransactionManager-protect">protect
 Use this mongoose plugin on models, that will participate in transactions.
@@ -132,7 +140,10 @@ const model = mongoose.model("Sample", schema);
 #### <a name="TransactionManager-transaction">transaction(body)
 - `body: (t: Transaction) => Promise<void>|void`
 
-Transaction body is defined as callback function (maybe async). This function can lock and load documents from database using `findOneForUpdate` method, and enqueue modification with `update`, `remove` and `create`.
+Transaction body is defined as callback function (maybe async). 
+This function can lock and load documents 
+from database using `findOneForUpdate` method, 
+and enqueue modifications with `update`, `remove` and `create`.
 ```typescript
 // following transactions are equivalent, but the first one is faster 
 await txMgr.transaction((t) => {
@@ -151,7 +162,15 @@ await txMgr.transaction(async (t) => {
     t.create(Order, {userId, sum});
 });
 ```
-#### <a name="TransactionManager-recovery">recovery()
+
+#### <a name="TransactionManager-regularRecovery">regularRecovery()
+Start to continually check interrupted transactions, and apply recovery operations.
+Promise is resolved when one iteration of txMgr.recovery() finishes. 
+(for example, you can wait for this promise, before `listen` call on http server).
+
+#### <a name="TransactionManager-recovery">recovery(considerTimeThreshold)
+Recover transactions that have been identified as interrupted. 
+Call this method on application startup. (NOT COMPLETELY IMPLEMENTED YET)
 
 #### <a name="TransactionManager-transactionPrepare">transactionPrepare(xaId, body)
 - `xaId: string`
@@ -186,6 +205,18 @@ Enqueue single document update operation.
 
 Enqueue single document remove operation.
 
+### <a name="DelayRowLockingEngine">DelayRowLockingEngine
+### <a name="RedisRowLockingEngine">RedisRowLockingEngine
+### <a name="LocalRowLockingEngine">LocalRowLockingEngine
+
 ## <a name="implementation"></a>Implementation notes
 TODO durability considerations, write concern, appId and recovery,
 performance
+
+#### <a name="implementation-recovery"></a>Recovery
+Transaction can be interrupted by different reasons, like application restart, crash, lost connection.
+Recovery operation return database into consistent state. Two situations is possible:
+- transaction (doc stored in transactions collection) has `state` == `"CREATED"`. Such transaction must be rolled back.
+- transaction has `state` == `"COMMITED"`. Such transaction must be applied. 
+
+#### <a name="implementation-row-locking"></a>Row locking

@@ -17,7 +17,7 @@ interface IUserDoc extends mongoose.Document {
     }).plugin(txMgr.protect)); // notice "protect" plugin usage
     txMgr.addModels([User]);
     await User.create({name: "a", balance: 10});
-    await User.create({name: "a", balance: 20});
+    await User.create({name: "b", balance: 20});
 
     await txMgr.transaction(async (t) => {
         const userA = await t.findOneForUpdate(User, {name: "a"});
@@ -25,7 +25,7 @@ interface IUserDoc extends mongoose.Document {
         if (!userA || !userB || userA.balance < 1) {
             throw new Error("conditions not satisfied");
         }
-        await t.update(userA, {balance: {$inc: -1}});
-        await t.update(userB, {balance: {$inc: 1}});
+        t.update(userA, {balance: {$inc: -1}});
+        t.update(userB, {balance: {$inc: 1}});
     });
 })();

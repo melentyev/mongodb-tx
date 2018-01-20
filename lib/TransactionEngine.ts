@@ -138,14 +138,16 @@ export class TransactionEngine {
     public async recoveryOne(considerTimeThreshold: boolean) {
         const now = new Date();
         const cond = {
-            appId: this.appId || null,
-            // can't recovery PREPARED transaction (violates externally managed 2pc)
+            // can't recovery PREPARED transaction (violates externaly managed 2pc)
             $or: [
                 {state: TransactionState.CREATED},
                 {state: TransactionState.FAILED},
                 {state: TransactionState.COMMITED},
             ],
         };
+        if (this.appId) {
+            cond["appId"] = this.appId;
+        }
         if (considerTimeThreshold) {
             const threshold = Math.ceil(now.getTime() - (this.lockWaitTimeout * 1.5));
             cond["updatedAt"] = {$lt: new Date(threshold)};
