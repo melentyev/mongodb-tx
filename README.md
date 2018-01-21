@@ -1,4 +1,4 @@
-# mongodb-tx [![Build Status](https://travis-ci.org/melentyev/mongodb-tx.svg?branch=master)](https://travis-ci.org/melentyev/mongodb-tx)
+# mongodb-tx [![Build Status](https://travis-ci.org/melentyev/mongodb-tx.svg?branch=master)](https://travis-ci.org/melentyev/mongodb-tx) [![npm version](https://badge.fury.io/js/mongodb-tx.svg)](https://badge.fury.io/js/mongodb-tx)
 
 This library for Node.js allows you to implement transactional semantics
 for MongoDB at the application level.
@@ -8,6 +8,11 @@ control of document-level locks (similar to row-level locking in RDBMS)
 to provide and manage transaction isolation.
 
 Currently `mongodb-tx` only works with mongoose. Native MongoDB driver support coming soon.
+
+Install with:
+```
+npm install mongodb-tx
+```
 
 ## Contents
 - [Examples](#examples)

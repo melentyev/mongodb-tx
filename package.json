@@ -1,7 +1,7 @@
 {
   "name": "mongodb-tx",
-  "version": "0.1.1",
-  "description": "Transaction library for MongoDB, focused on isolation.",
+  "version": "0.1.2",
+  "description": "Transactions with atomicity and isolation for Node.js + MongoDB.",
   "scripts": {
     "build": "tsc",
     "test": "npm run build && ava dist/test/test-account.js",
@@ -10,6 +10,10 @@
   },
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/melentyev/mongodb-tx.git"
+  },
   "dependencies": {
     "es6-promisify": "^5.0.0",
     "lodash": "^4.17.4",
