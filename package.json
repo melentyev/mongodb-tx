@@ -4,8 +4,8 @@
   "description": "Transactions with atomicity and isolation for Node.js + MongoDB.",
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && ava dist/test/test-account.js",
-    "test-local": "nyc ava dist/test/test-account.js dist/test/test-high-concurrency.js && nyc report --reporter=html",
+    "test": "npm run build && ava -s dist/test/test-account.js dist/test/test-native.js dist/test/test-goose-concurrency.js dist/test/test-native-concurrency.js",
+    "test-local": "nyc ava -s dist/test/test-account.js dist/test/test-native.js dist/test/test-goose-concurrency.js dist/test/test-native-concurrency.js && nyc report --reporter=html",
     "watch": "tsc -w"
   },
   "main": "dist/lib/index.js",
@@ -43,6 +43,7 @@
     "@types/sequelize": "^4.27.0",
     "ava": "^0.24.0",
     "express": "^4.16.2",
+    "mongodb": "^3.0.1",
     "mongoose": "^5.0.0-rc0",
     "nyc": "^11.4.1",
     "pg": "^6.4.2",

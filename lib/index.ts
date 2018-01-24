@@ -5,7 +5,7 @@ export {
     IMongoosePluginOptions,
 } from "./TransactionManager";
 
-export {IRowLockingEngine}     from "./IRowLockingEngine";
-export {LocalRowLockingEngine} from "./LocalRowLockingEngine";
-export {DelayRowLockingEngine} from "./DelayRowLockingEngine";
-export {RedisRowLockingEngine} from "./RedisRowLockingEngine";
+export {IDocLockingEngine}     from "./doc-locking/IDocLockingEngine";
+export {LocalDocLockingEngine} from "./doc-locking/LocalDocLockingEngine";
+export {DelayDocLockingEngine} from "./doc-locking/DelayDocLockingEngine";
+export {RedisDocLockingEngine} from "./doc-locking/RedisDocLockingEngine";

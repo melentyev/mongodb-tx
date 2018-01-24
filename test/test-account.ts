@@ -1,44 +1,46 @@
-import test from "ava";
+import * as ava from "ava";
 import * as _ from "lodash";
 import * as mongoose from "mongoose";
-import {delayAsync} from "../lib/DelayRowLockingEngine";
+
+import {delayAsync} from "../lib/doc-locking/DelayDocLockingEngine";
 import {TransactionManager} from "../lib/index";
 import {
-    IModels, initMongooseDefault, initTestDb, runTransactionFailedProcess, testFillDb, transferFunds,
-    transferFundsPreLock,
+    IModels, initTestDb, runTransactionFailedProcess, testFillDb, transferFunds,
 } from "./utils";
 
-let models: IModels;
-let mongoTx: TransactionManager;
-let mongoTxLocalLock: TransactionManager;
-let conn: mongoose.Connection;
-let mongooseDefault;
+const test = ava.test as ava.RegisterContextual<{
+    models: IModels;
+    mongoTx: TransactionManager;
+    mongoTxLocalLock: TransactionManager;
+    txMgr: TransactionManager;
+    conn: mongoose.Connection;
+    mongooseDefault: any;
+}>;
 
-test.before(async (t) => {
+test.beforeEach(async (t) => {
     const initRes = await initTestDb(`${process.env.DB_CONNECTION_STRING}/KMTESTTX-ACCOUNT`);
-    models = initRes.models;
-    mongoTx = initRes.mongoTx;
-    mongoTxLocalLock = initRes.mongoTxLocalLock;
-    conn = initRes.conn;
-    mongooseDefault = await initMongooseDefault(`${process.env.DB_CONNECTION_STRING}/KMTESTTX-ACCOUNT`);
+    t.context.models = initRes.models;
+    t.context.mongoTx = initRes.mongoTx;
+    t.context.mongoTxLocalLock = initRes.mongoTxLocalLock;
+    t.context.conn = initRes.conn;
+    await testFillDb(t.context.models, t.context.mongoTx);
 });
 
-test.beforeEach(async (t) => { await testFillDb(models, mongoTx); });
-
 test.afterEach(async (t) => {
-    const txf = mongoTx.getConfig().txFieldName;
-    t.falsy((await mongoTx.getTxModel().find({}).limit(1)).length);
-    t.falsy((await models.User.find({[txf]: {$exists: true}}).limit(1)).length);
-    t.falsy((await models.Product.find({[txf]: {$exists: true}}).limit(1)).length);
-    t.falsy((await models.Order.find({[txf]: {$exists: true}}).limit(1)).length);
+    const txf = t.context.mongoTx.getConfig().txFieldName;
+    t.falsy((await t.context.mongoTx.getTxModel().find({}).limit(1)).length);
+    t.falsy((await t.context.models.User.find({[txf]: {$exists: true}}).limit(1)).length);
+    t.falsy((await t.context.models.Product.find({[txf]: {$exists: true}}).limit(1)).length);
+    t.falsy((await t.context.models.Order.find({[txf]: {$exists: true}}).limit(1)).length);
+    await t.context.conn.close();
 });
 
 test.serial("test-account", async (t) => {
     try {
-        await transferFunds(models, mongoTx, "user1", "user2", 30);
-        const balance1 = (await models.User.findOne({name: "user2"})).balance;
-        t.true((await models.User.findOne({name: "user1"})).balance === 470);
-        t.true((await models.User.findOne({name: "user2"})).balance === 130);
+        await transferFunds(t.context.models, t.context.mongoTx, "user1", "user2", 30);
+        const balance1 = (await t.context.models.User.findOne({name: "user2"})).balance;
+        t.true((await t.context.models.User.findOne({name: "user1"})).balance === 470);
+        t.true((await t.context.models.User.findOne({name: "user2"})).balance === 130);
     }
     catch (err) {
         console.error(err);
@@ -47,13 +49,13 @@ test.serial("test-account", async (t) => {
 });
 
 test.serial("test-account-no-user", async (t) => {
-    const error = await t.throws(transferFunds(models, mongoTx, "user1", "userNone", 30));
+    const error = await t.throws(transferFunds(t.context.models, t.context.mongoTx, "user1", "userNone", 30));
     t.is(error.message, "USER_NOT_FOUND");
 });
 
 async function testAccountConcurrent(t, getTxMgr, getModels) {
-    const txMgr = getTxMgr();
-    const testModels = getModels();
+    const txMgr = getTxMgr(t);
+    const testModels = getModels(t);
     try {
         await Promise.all([
             transferFunds(testModels, txMgr, "user1", "user2", 10),
@@ -72,70 +74,53 @@ async function testAccountConcurrent(t, getTxMgr, getModels) {
     return t.pass();
 }
 // testAccountConcurrent.title = (providedTitle, input, expected) => `${providedTitle} ${input} = ${expected}`.trim();
-test.serial("test-conc-4", testAccountConcurrent, () => mongoTx, () => models);
-test.serial("test-conc-4-local-lock", testAccountConcurrent, () => mongoTxLocalLock, () => models);
-test.serial("test-conc-4-goose", testAccountConcurrent, () => mongooseDefault.mongoTx, () => mongooseDefault.models);
+test.serial("test-conc-4", testAccountConcurrent,
+    (t) => t.context.mongoTx, (t) => t.context.models);
+test.serial("test-conc-4-local-lock", testAccountConcurrent,
+    (t) => t.context.mongoTxLocalLock, (t) => t.context.models);
 
 test.serial("test-account-concurrent-3-error", async (t) => {
     await Promise.all([
-        transferFunds(models, mongoTx, "user1", "user2", 600).catch((e) => {}),
-        transferFunds(models, mongoTx, "user1", "user2", 300).catch((e) => {}),
-        transferFunds(models, mongoTx, "user3", "user1", 5).catch((e) => {}),
+        transferFunds(t.context.models, t.context.mongoTx, "user1", "user2", 600).catch((e) => {}),
+        transferFunds(t.context.models, t.context.mongoTx, "user1", "user2", 300).catch((e) => {}),
+        transferFunds(t.context.models, t.context.mongoTx, "user3", "user1", 5).catch((e) => {}),
     ]);
     try {
-        t.true((await models.User.findOne({name: "user1"})).balance === 205);
-        t.true((await models.User.findOne({name: "user2"})).balance === 400);
-        t.true((await models.User.findOne({name: "user3"})).balance === 795);
+        t.true((await t.context.models.User.findOne({name: "user1"})).balance === 205);
+        t.true((await t.context.models.User.findOne({name: "user2"})).balance === 400);
+        t.true((await t.context.models.User.findOne({name: "user3"})).balance === 795);
     }
     catch (err) {
         console.error(err);
         return t.fail("transaction check failed");
     }
-});
-
-test.serial("test-account-concurrent-pre-lock-3-error", async (t) => {
-    await Promise.all([
-        transferFundsPreLock(models, mongoTx, "user1", "user2", 600).catch((e) => {}),
-        transferFundsPreLock(models, mongoTx, "user1", "user2", 300).catch((e) => {}),
-        transferFundsPreLock(models, mongoTx, "user3", "user1", 5).catch((e) => {}),
-    ]);
-    try {
-        t.true((await models.User.findOne({name: "user1"})).balance === 205);
-        t.true((await models.User.findOne({name: "user2"})).balance === 400);
-        t.true((await models.User.findOne({name: "user3"})).balance === 795);
-    }
-    catch (err) {
-        console.error(err);
-        return t.fail("transaction check failed");
-    }
-    return t.pass();
 });
 
 test.serial("test-remove-rollback-remove", async (t) => {
-    await mongoTx.transaction(async (tx) => {
-        const u = await tx.findOneForUpdate(models.User, {name: "user1"});
+    await t.context.mongoTx.transaction(async (tx) => {
+        const u = await tx.findOneForUpdate(t.context.models.User, {name: "user1"});
         tx.remove(u);
     });
-    await t.throws(mongoTx.transaction(async (tx) => {
-        await tx.findOneForUpdate(models.User, {name: "user2"});
-        tx.remove(models.User, {name: "user2"});
+    await t.throws(t.context.mongoTx.transaction(async (tx) => {
+        await tx.findOneForUpdate(t.context.models.User, {name: "user2"});
+        tx.remove(t.context.models.User, {name: "user2"});
         throw new Error("ROLLBACK");
     }));
-    t.truthy(await models.User.findOne({name: "user2"}));
-    await mongoTx.transaction(async (tx) => {
-        await tx.findOneForUpdate(models.User, {name: "user3"});
-        tx.remove(models.User, {name: "user3"});
+    t.truthy(await t.context.models.User.findOne({name: "user2"}));
+    await t.context.mongoTx.transaction(async (tx) => {
+        await tx.findOneForUpdate(t.context.models.User, {name: "user3"});
+        tx.remove(t.context.models.User, {name: "user3"});
     });
 });
 
 test.serial("test-lock-wait-timeout", async (t) => {
     const mongoTxSmallLockWait = new TransactionManager(
-        {mongoose, mongooseConn: conn, lockWaitTimeout: 800});
-    mongoTxSmallLockWait.addModels(_.values(models));
+        {mongoose, mongooseConn: t.context.conn, lockWaitTimeout: 800});
+    mongoTxSmallLockWait.addModels(_.values(t.context.models));
     await mongoTxSmallLockWait.transaction(async (tx) => {
-        await tx.findOneForUpdate(models.User, {name: "user1"});
+        await tx.findOneForUpdate(t.context.models.User, {name: "user1"});
         await t.throws(mongoTxSmallLockWait.transaction(async (txInner) => {
-            await txInner.findOneForUpdate(models.User, {name: "user1"});
+            await txInner.findOneForUpdate(t.context.models.User, {name: "user1"});
         }));
     });
 });
@@ -143,39 +128,47 @@ test.serial("test-lock-wait-timeout", async (t) => {
 async function testCreateOrder(t, doThrow, expected) {
     let orderId;
     try {
-        await mongoTx.transaction(async (tx) => {
-            orderId = tx.create(models.Order, {})._id;
+        await t.context.mongoTx.transaction(async (tx) => {
+            orderId = tx.create(t.context.models.Order, {})._id;
             if (doThrow) { throw new Error("ROLLBACK"); }
         });
     } catch (err) {}
-    t.is((await models.Order.find({_id: orderId})).length, expected);
+    t.is((await t.context.models.Order.find({_id: orderId})).length, expected);
 }
 
 test.serial("test-create", testCreateOrder, false, 1);
 test.serial("test-create-rollback", testCreateOrder, true, 0);
 
 test.serial("test-recovery", async (t) => {
+    const {models, conn, mongoTx} = t.context;
     const appId = "test-failing-app";
     await runTransactionFailedProcess(appId);
+
     t.truthy(await models.User.findOne({[mongoTx.getConfig().txFieldName]: {$exists: true}}));
 
     const mongoTxFailingApp = new TransactionManager(
         {mongoose, mongooseConn: conn, appId});
     mongoTxFailingApp.addModels(_.values(models));
-    await mongoTxFailingApp.recovery(false);
+    await mongoTxFailingApp.regularRecovery();
+    mongoTxFailingApp.regularRecovery(false);
 });
 
 test.serial("test-recovery-timeout", async (t) => {
+    const {models, conn, mongoTx} = t.context;
     await runTransactionFailedProcess("");
+
     const mongoTxSmallLockWait = new TransactionManager(
         {mongoose, mongooseConn: conn, lockWaitTimeout: 500});
     mongoTxSmallLockWait.addModels(_.values(models));
     await delayAsync(1000);
-    await mongoTxSmallLockWait.recovery();
+    await mongoTxSmallLockWait.regularRecovery();
+    await delayAsync(1000);
+    mongoTxSmallLockWait.regularRecovery(false);
     t.falsy(await models.User.findOne({[mongoTx.getConfig().txFieldName]: {$exists: true}}));
 });
 
 test.serial("test-prepared", async (t) => {
+    const {models, mongoTx} = t.context;
     await mongoTx.transactionPrepare("xa1", async (tx) => {
         await tx.findOneForUpdate(models.User, {name: "user1"});
         tx.update(models.User, {name: "user1"}, {balance: 12345});
@@ -198,19 +191,14 @@ test.serial("test-prepared", async (t) => {
     await t.throws(mongoTx.rollbackPrepared("xa2"));
 });
 
-test.serial("test-unknow-model", async (t) => {
-    await t.throws(mongoTx.transaction(async (tx) => {
-        await tx.findOneForUpdate(mongooseDefault.models.User, {name: "user1"});
-    }));
-    await t.notThrows(mongoTx.transaction(async (tx) => {
-        await tx.findOneForUpdate("User", {name: "user1"});
-    }));
-    await t.throws(mongoTx.transaction(async (tx) => {
-        await tx.findOneForUpdate("UserX", {name: "user1"});
-    }));
-});
+// test.only.serial("test-unknow-model", async (t) => {
+//     await t.throws(mongoTx.transaction(async (tx) => {
+//         await tx.findOneForUpdate(mongooseDefault.models.User, {name: "user1"});
+//     }));
+// });
 
 test.serial("test-unset", async (t) => {
+    const {models, mongoTx} = t.context;
     t.not((await models.User.findOne({name: "user1"})).balance, undefined);
     await mongoTx.transaction(async (tx) => {
         const u = await tx.findOneForUpdate(models.User, {name: "user1"});

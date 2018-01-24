@@ -2,8 +2,7 @@ import {execFile} from "child_process";
 import * as _ from "lodash";
 import * as mongoose from "mongoose";
 import * as path from "path";
-import {LocalRowLockingEngine} from "../lib/index";
-import {TransactionManager} from "../lib/index";
+import {LocalDocLockingEngine, TransactionManager} from "../lib/index";
 
 export interface IUserDocument extends mongoose.Document {
     name: string;
@@ -19,7 +18,7 @@ export interface IModels {
 async function initModels(conn?) {
     const mongoTx = new TransactionManager({mongooseConn: conn, mongoose});
     const mongoTxLocalLock = new TransactionManager({
-        mongooseConn: conn, mongoose, rowLockEngine: new LocalRowLockingEngine(),
+        mongooseConn: conn, mongoose, docLockEngine: new LocalDocLockingEngine(),
     });
 
     await mongoTx.getTxModel().remove({});
@@ -65,7 +64,8 @@ export async function makeOrder({User, Product, Order}: IModels, mongoTx: Transa
         if (!user || user.balance < sum) {
             throw new Error("NOT_ENOUGH_BALANCE");
         }
-        const products = await t.all(productIds.map((_id) => t.findOneForUpdate(Product, {_id})));
+        const products = [];
+        for (const _id of productIds) { products.push(await t.findOneForUpdate(Product, {_id})); }
         if (_.some(products, (p) => p.qty < 1)) {
             throw new Error("NOT_ENOUGH_PRODUCT_QTY");
         }
@@ -81,8 +81,10 @@ export async function transferFunds({User}: IModels, mongoTx: TransactionManager
 {
     await mongoTx.transaction(async (t) => {
         // preventing deadlock
-        const orderedNames = _.sortBy([from, to], (x) => x);
-        const users = await t.mapSeries(orderedNames, (name) => t.findOneForUpdate(User, {name}));
+        const users = [];
+        for (const name of _.sortBy([from, to], (x) => x)) {
+            users.push(await t.findOneForUpdate(User, {name}));
+        }
 
         const userFrom = users.find((u) => _.get(u, "name") === from);
         const userTo = users.find((u) => _.get(u, "name") === to);
@@ -94,34 +96,8 @@ export async function transferFunds({User}: IModels, mongoTx: TransactionManager
             throw new Error("NOT_ENOUGH_BALANCE");
         }
 
-        await t.update(User, {name: from}, {$inc: {balance: -sum}});
-        await t.update(User, {name: to}, {$inc: {balance: +sum}});
-    });
-}
-
-export async function transferFundsPreLock({User}: IModels, mongoTx: TransactionManager,
-                                           from: string, to: string, sum: number)
-{
-    await mongoTx.transaction(async (t) => {
-        const orderedNames = _.sortBy([from, to], (x) => x);
-        orderedNames.forEach((name) => t.locks.declare(User, {name}));
-        await t.locks.save();
-
-        // preventing deadlock
-        const users = await t.mapSeries(orderedNames, (name) => t.findOneForUpdate(User, {name}));
-
-        const userFrom = users.find((u) => u.name === from);
-        const userTo = users.find((u) => u.name === to);
-
-        if (!userFrom || !userTo) {
-            throw new Error("USER_NOT_FOUND");
-        }
-        if (userFrom.balance < sum) {
-            throw new Error("NOT_ENOUGH_BALANCE");
-        }
-
-        await t.update(User, {name: from}, {$inc: {balance: -sum}});
-        await t.update(User, {name: to}, {$inc: {balance: +sum}});
+        t.update(User, {name: from}, {$inc: {balance: -sum}});
+        t.update(User, {name: to}, {$inc: {balance: +sum}});
     });
 }
 

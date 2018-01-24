@@ -103,7 +103,7 @@ TODO api description
     * [constructor](#TransactionManager-constructor)
     * [protect](#TransactionManager-protect)
     * [transaction](#TransactionManager-transaction)
-    * [recovery](#TransactionManager-recovery)
+    * [regularRecovery](#TransactionManager-regularRecovery)
     * [transactionPrepare](#TransactionManager-transactionPrepare)
     * [commitPrepared](#TransactionManager-commitPrepared)
     * [rollbackPrepared](#TransactionManager-rollbackPrepared)
@@ -168,21 +168,20 @@ await txMgr.transaction(async (t) => {
 });
 ```
 
-#### <a name="TransactionManager-regularRecovery">regularRecovery()
+#### <a name="TransactionManager-regularRecovery">regularRecovery(run: boolean)
 Start to continually check interrupted transactions, and apply recovery operations.
 Promise is resolved when one iteration of txMgr.recovery() finishes. 
 (for example, you can wait for this promise, before `listen` call on http server).
 
-#### <a name="TransactionManager-recovery">recovery(considerTimeThreshold)
-Recover transactions that have been identified as interrupted. 
-Call this method on application startup. (NOT COMPLETELY IMPLEMENTED YET)
-
 #### <a name="TransactionManager-transactionPrepare">transactionPrepare(xaId, body)
 - `xaId: string`
 - `body: (t: Transaction) => Promise<void>|void`
+
 Prepare transaction for two-phase commit (external). Similar to PostgreSQL `PREPARE TRANSACTION` https://www.postgresql.org/docs/10/static/sql-prepare-transaction.html
+
 #### <a name="TransactionManager-commitPrepared">commitPrepared(xaId)
 - `xaId: string`
+
 #### <a name="TransactionManager-rollbackPrepared">rollbackPrepared(xaId)
 - `xaId: string`
 
@@ -199,16 +198,23 @@ Find and set lock on a single document, matching `condition`.
 
 Create single document. (operation is enqueued)
 
-#### <a name="Transaction-create">update(doc, updates)
+#### <a name="Transaction-update">update(doc, updates)
 - `doc: mongoose.Document`
-- `updates`
+- `update` - the modifications to apply
 
-Enqueue single document update operation.
+Enqueue single document update operation. Accepts fetched document.
 
-#### <a name="Transaction-create">remove(doc)
+#### <a name="Transaction-remove">remove(doc)
 - `doc: mongoose.Document`
 
-Enqueue single document remove operation.
+Enqueue single document remove operation. Accepts fetched document.
+
+#### <a name="Transaction-remove-model">remove(model, condition)
+
+- `model: mongoose.Model`
+- `condition` selection filter ([query operators](https://docs.mongodb.com/manual/reference/operator/))
+
+Same as [remove](#Transaction-remove), but accepts model and deletion criteria instean of prefetched document object.
 
 ### <a name="DelayRowLockingEngine">DelayRowLockingEngine
 ### <a name="RedisRowLockingEngine">RedisRowLockingEngine

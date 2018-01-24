@@ -1,9 +1,9 @@
 import * as promisify from "es6-promisify";
 import * as redis from "redis";
 import {RedisClient} from "redis";
-import {IRowLockingEngine} from "./IRowLockingEngine";
+import {IDocLockingEngine} from "./IDocLockingEngine";
 
-export class RedisRowLockingEngine implements IRowLockingEngine {
+export class RedisDocLockingEngine implements IDocLockingEngine {
     private clients: RedisClient[] = [];
     private writer: RedisClient;
     constructor() {

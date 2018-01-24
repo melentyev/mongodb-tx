@@ -1,7 +1,7 @@
 import * as _ from "lodash";
-import {IRowLockingEngine} from "./IRowLockingEngine";
+import {IDocLockingEngine} from "./IDocLockingEngine";
 
-export class LocalRowLockingEngine implements IRowLockingEngine {
+export class LocalDocLockingEngine implements IDocLockingEngine {
     private tokens: {[propName: string]: boolean} = {};
     private subscribers: {[propName: string]: any[]} = {};
     constructor() {}
