@@ -143,8 +143,7 @@ export abstract class TransactionEngineBase<TId, TTransaction extends ITransacti
         return cnt;
     }
 
-    public async findOneForUpdate<T>(tx: ITransactionDoc<TId>, col: string, cond, {returnDoc = true} = {})
-    {
+    public async findOneForUpdate<T>(tx: ITransactionDoc<TId>, col: string, cond, {returnDoc = true} = {}) {
         const startAtTimestamp = new Date().getTime();
         const updCond = {...cond, $or: [{[this.txFieldName]: null}, {[this.txFieldName]: tx._id}]};
         const upd = {$set: {[this.txFieldName]: tx._id}};

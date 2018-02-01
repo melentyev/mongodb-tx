@@ -191,12 +191,6 @@ test.serial("test-prepared", async (t) => {
     await t.throws(mongoTx.rollbackPrepared("xa2"));
 });
 
-// test.only.serial("test-unknow-model", async (t) => {
-//     await t.throws(mongoTx.transaction(async (tx) => {
-//         await tx.findOneForUpdate(mongooseDefault.models.User, {name: "user1"});
-//     }));
-// });
-
 test.serial("test-unset", async (t) => {
     const {models, mongoTx} = t.context;
     t.not((await models.User.findOne({name: "user1"})).balance, undefined);
