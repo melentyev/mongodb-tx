@@ -1,6 +1,6 @@
 {
   "name": "mongodb-tx",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Transactions with atomicity and isolation for Node.js + MongoDB.",
   "scripts": {
     "build": "tsc",
