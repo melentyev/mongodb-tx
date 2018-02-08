@@ -2,10 +2,13 @@ import {EventEmitter} from "events";
 import * as _ from "lodash";
 
 import {IDocLockingEngine} from "./doc-locking/IDocLockingEngine";
-import {
-    ITransaction, ITransactionDoc, ITxConfig, TransactionState, TransactionStepType, TxLockTimeoutError,
-    TxPreparedNotFound,
-} from "./Interfaces";
+import {TxLockTimeoutError} from "./error/TxLockTimeoutError";
+import {TxPreparedNotFoundError} from "./error/TxPreparedNotFoundError";
+import {TxUpdateDocNotFoundError} from "./error/TxUpdateDocNotFoundError";
+import {ITransaction, ITransactionDoc} from "./Interfaces";
+import {ITxConfig} from "./ITxConfig";
+import {TransactionState} from "./TransactionState";
+import {TransactionStepType} from "./TransactionStepType";
 
 export abstract class TransactionEngineBase<TId, TTransaction extends ITransaction<TId>> {
     public txFieldName: string;
@@ -60,7 +63,7 @@ export abstract class TransactionEngineBase<TId, TTransaction extends ITransacti
     public async commitPrepared(xaId: string) {
         const tx = await this.findOne<ITransactionDoc<TId>>(this.txColName, {xaId, state: TransactionState.PREPARED});
         if (!tx) {
-            throw new TxPreparedNotFound();
+            throw new TxPreparedNotFoundError();
         }
         await this._commit(tx._id, [TransactionState.PREPARED, TransactionState.COMMITED]);
     }
@@ -68,7 +71,7 @@ export abstract class TransactionEngineBase<TId, TTransaction extends ITransacti
     public async rollbackPrepared(xaId: string) {
         const tx = await this.findOne<ITransactionDoc<TId>>(this.txColName, {xaId, state: TransactionState.PREPARED});
         if (!tx) {
-            throw new TxPreparedNotFound();
+            throw new TxPreparedNotFoundError();
         }
         await this._rollback(tx._id, [TransactionState.PREPARED, TransactionState.FAILED]);
     }
@@ -175,7 +178,9 @@ export abstract class TransactionEngineBase<TId, TTransaction extends ITransacti
             if (step.t === TransactionStepType.UPDATE || step.t === TransactionStepType.REMOVE) {
                 const cond = this.decode(step.c);
                 const updated = await this.findOneForUpdate(t.tx, step.m, cond, {returnDoc: false});
-                if (step.e && !updated) { throw new Error("FAILED"); } // TODO error
+                if (!updated && step.e && step.e.throwIfMissing) {
+                    throw new TxUpdateDocNotFoundError(step.e.throwIfMissing);
+                }
             }
             else if (step.t === TransactionStepType.INSERT) {
                 const cond = this.decode(step.c);

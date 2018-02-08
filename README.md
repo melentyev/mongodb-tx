@@ -115,14 +115,14 @@ Take a look at the samples in [examples](https://github.com/melentyev/mongodb-tx
     * [update](#Transaction-update)
     * [remove](#Transaction-remove)
     
-- [native/TransactionManager](#native-TransactionManager)
+- [native.TransactionManager](#native-TransactionManager)
     * [constructor](#native-TransactionManager-constructor)
     * [transaction](#native-TransactionManager-transaction)
     * [regularRecovery](#native-TransactionManager-regularRecovery)
     * [transactionPrepare](#native-TransactionManager-transactionPrepare)
     * [commitPrepared](#native-TransactionManager-commitPrepared)
     * [rollbackPrepared](#native-TransactionManager-rollbackPrepared)
-- [native/Transaction](#native-Transaction)
+- [native.Transaction](#native-Transaction)
     * [findOneForUpdate](#native-Transaction-findOneForUpdate)
     * [create](#native-Transaction-create)
     * [update](#native-Transaction-update)
@@ -220,12 +220,14 @@ Prepare transaction for two-phase commit (external). Similar to PostgreSQL `PREP
 #### <a name="Transaction-findOneForUpdate">findOneForUpdate(model, cond)
 - `model: mongoose.Model`
 - `condition` - selection filter ([query operators](https://docs.mongodb.com/manual/reference/operator/))
+- *returns* `Promise<mongoose.Document>`
 
 Find and set lock on a single document, matching `condition`.
 
-#### <a name="Transaction-create">create(model, values): mongoose.Document
+#### <a name="Transaction-create">create(model, values) 
 - `model: mongoose.Model`
 - `values`
+- *returns* `mongoose.Document`
 
 Create single document. (operation is enqueued)
 
@@ -252,6 +254,49 @@ Enqueue single document remove operation. Accepts fetched document.
 - `condition` selection filter ([query operators](https://docs.mongodb.com/manual/reference/operator/))
 
 Same as [remove](#Transaction-remove), but accepts model and selection criteria instead of prefetched document object.
+
+
+### <a name="native-TransactionManager">native.TransactionManager
+This is the main class, the entry point to `mongodb-tx` (when using this library with native mongodb driver).
+#### <a name="native-TransactionManager-constructor">constructor(config)
+
+Instantiate `TransactionManager` with your configuration.
+Possible `config` fields:
+- `db: Db` - your [mongodb.Db](http://mongodb.github.io/node-mongodb-native/3.0/api/Db.html) class instance.
+- `rowLockEngine (optional)` - same as in mongoose TransactionManager.
+- `appId: string (optional)` - same as in mongoose TransactionManager.
+- `lockWaitTimeout: number (optional)` - same as in mongoose TransactionManager.
+- `txFieldName: string (optional)` - same as in mongoose TransactionManager.
+
+#### <a name="native-TransactionManager-transaction">transaction(body)
+- `body: (t: Transaction) => Promise<void>|void`
+
+#### <a name="native-TransactionManager-regularRecovery">regularRecovery(run: boolean)
+
+#### <a name="native-TransactionManager-transactionPrepare">transactionPrepare(xaId, body)
+- `xaId: string`
+- `body: (t: native.Transaction) => Promise<void>|void`
+
+#### <a name="native-TransactionManager-commitPrepared">commitPrepared(xaId)
+- `xaId: string`
+
+#### <a name="native-TransactionManager-rollbackPrepared">rollbackPrepared(xaId)
+- `xaId: string`
+
+### <a name="native-Transaction">native.Transaction
+
+#### <a name="native-Transaction-findOneForUpdate">findOneForUpdate(collection, cond)
+
+#### <a name="native-Transaction-create">create(collection, values) 
+
+#### <a name="native-Transaction-update">update(doc, updates)
+
+#### <a name="native-Transaction-update-model">update(collection, condition, updates)
+
+#### <a name="native-Transaction-remove">remove(doc)
+
+#### <a name="native-Transaction-remove-model">remove(collection, condition)
+
 
 ### <a name="DelayRowLockingEngine">DelayRowLockingEngine
 ### <a name="RedisRowLockingEngine">RedisRowLockingEngine

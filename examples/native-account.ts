@@ -1,5 +1,5 @@
 import {MongoClient} from "mongodb";
-import {TransactionManager} from "../lib/native";
+import {native} from "../lib";
 
 (async () => {
     const client = await MongoClient.connect(`${process.env.DB_CONNECTION_STRING}`);
@@ -8,7 +8,7 @@ import {TransactionManager} from "../lib/native";
 
     const col = db.collection("User");
     await col.insertMany([{name: "a", balance: 10}, {name: "b", balance: 20}]);
-    const txMgr = new TransactionManager({db});
+    const txMgr = new native.TransactionManager({db});
 
     await txMgr.transaction(async (t) => {
         const userA = await t.findOneForUpdate<any>("User", {name: "a"});

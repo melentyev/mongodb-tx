@@ -2,10 +2,12 @@ import {EventEmitter} from "events";
 import * as _ from "lodash";
 import * as mongoose from "mongoose";
 
-import {IDocLockingEngine} from "./doc-locking/IDocLockingEngine";
-import {ITransactionDoc, ITxConfig, TxUnknownModelError} from "./Interfaces";
+import {IDocLockingEngine} from "../doc-locking/IDocLockingEngine";
+import {TxUnknownModelError} from "../error/TxUnknownModelError";
+import {ITransactionDoc} from "../Interfaces";
+import {ITxConfig} from "../ITxConfig";
+import {TransactionEngineBase} from "../TransactionEngineBase";
 import {Transaction} from "./Transaction";
-import {TransactionEngineBase} from "./TransactionEngineBase";
 
 export interface ITransactionInstance extends mongoose.Document, ITransactionDoc<any> {}
 

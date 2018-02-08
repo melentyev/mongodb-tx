@@ -1,12 +1,9 @@
-import * as _ from "lodash";
-
 import {Connection, Model, Mongoose, Schema} from "mongoose";
-import {DelayDocLockingEngine} from "./doc-locking/DelayDocLockingEngine";
-import {IDocLockingEngine} from "./doc-locking/IDocLockingEngine";
-import {ITxConfig} from "./Interfaces";
+import {DelayDocLockingEngine} from "../doc-locking/DelayDocLockingEngine";
+import {IDocLockingEngine} from "../doc-locking/IDocLockingEngine";
+import {TransactionManagerBase} from "../TransactionManagerBase";
 import {Transaction} from "./Transaction";
 import {ITransactionInstance, TransactionEngine} from "./TransactionEngine";
-import {TransactionManagerBase} from "./TransactionManagerBase";
 
 export interface ITransactionManagerOptions {
     mongoose?: Mongoose;

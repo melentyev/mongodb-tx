@@ -1,41 +1,10 @@
-export class TxUnknownModelError extends Error {
-    constructor() { super("TX_UNKNOWN_MODEL_ERROR"); }
-}
-
-export class TxPreparedNotFound extends Error {
-    constructor() { super("TX_PREPARED_NOT_FOUND"); }
-}
-
-export class TxLockTimeoutError extends Error {
-    constructor() { super("TX_LOCK_TIMEOUT_ERROR"); }
-}
-
-export enum TransactionState {
-    CREATED  = "CREATED",
-    PREPARED = "PREPARED",
-    COMMITED = "COMMITED",
-    FAILED   = "FAILED",
-}
-
-export enum TransactionStepType {
-    INSERT = "INSERT",
-    UPDATE = "UPDATE",
-    REMOVE = "REMOVE",
-}
-
-export interface ITxConfig {
-    txColName: string;
-    txFieldName: string;
-    verFieldName: string;
-    encodePrefix: string;
-    lockWaitTimeout: number;
-    appId: string | null;
-}
+import {TransactionState} from "./TransactionState";
+import {TransactionStepType} from "./TransactionStepType";
 
 export interface IStepDescription {
     m: string;
     c: any;
-    e: any;
+    e: IUpdateRemoveOptions | null;
     t: TransactionStepType;
     upd: any;
 }

@@ -1,7 +1,7 @@
 require("source-map-support/register");
 
 const {MongoClient} = require("mongodb");
-const {TransactionManager} = require("../dist/lib/native");
+const {TransactionManager} = require("../dist/lib").native;
 
 const SEATS = "seats";
 const USERS = "users";

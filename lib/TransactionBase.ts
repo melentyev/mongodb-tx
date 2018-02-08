@@ -1,5 +1,6 @@
-import {IStepDescription, ITransaction, ITransactionDoc, IUpdateRemoveOptions, TransactionStepType} from "./Interfaces";
+import {IStepDescription, ITransaction, ITransactionDoc, IUpdateRemoveOptions} from "./Interfaces";
 import {TransactionEngineBase} from "./TransactionEngineBase";
+import {TransactionStepType} from "./TransactionStepType";
 
 export class TransactionBase<TId, TTransaction extends ITransaction<TId>> {
     protected fetchedDocModels = [];

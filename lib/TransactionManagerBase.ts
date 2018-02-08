@@ -1,8 +1,9 @@
 import {EventEmitter} from "events";
-import {delayAsync} from "./doc-locking/DelayDocLockingEngine";
-import {ITransaction, ITxConfig} from "./Interfaces";
-import {TransactionEngineBase} from "./TransactionEngineBase";
 import * as _ from "lodash";
+import {delayAsync} from "./doc-locking/DelayDocLockingEngine";
+import {ITransaction} from "./Interfaces";
+import {ITxConfig} from "./ITxConfig";
+import {TransactionEngineBase} from "./TransactionEngineBase";
 
 export class TransactionManagerBase<
         TId,

@@ -3,7 +3,8 @@ import {Db} from "mongodb";
 import * as mongodb from "mongodb";
 
 import {IDocLockingEngine} from "../doc-locking/IDocLockingEngine";
-import {ITransactionDoc, ITxConfig} from "../Interfaces";
+import {ITransactionDoc} from "../Interfaces";
+import {ITxConfig} from "../ITxConfig";
 import {TransactionEngineBase} from "../TransactionEngineBase";
 import {Transaction} from "./Transaction";
 

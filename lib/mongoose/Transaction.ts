@@ -1,6 +1,7 @@
 import * as mongoose from "mongoose";
-import {IUpdateRemoveOptions, TransactionStepType} from "./Interfaces";
-import {TransactionBase} from "./TransactionBase";
+import {IUpdateRemoveOptions} from "../Interfaces";
+import {TransactionBase} from "../TransactionBase";
+import {TransactionStepType} from "../TransactionStepType";
 import {ITransactionInstance, TransactionEngine} from "./TransactionEngine";
 
 export class Transaction extends TransactionBase<mongoose.Schema.Types.ObjectId, Transaction> {

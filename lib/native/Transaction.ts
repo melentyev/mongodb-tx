@@ -1,7 +1,8 @@
 import * as mongodb from "mongodb";
 
-import {ITransactionDoc, IUpdateRemoveOptions, TransactionStepType} from "../Interfaces";
+import {ITransactionDoc, IUpdateRemoveOptions} from "../Interfaces";
 import {TransactionBase} from "../TransactionBase";
+import {TransactionStepType} from "../TransactionStepType";
 import {TransactionEngine} from "./TransactionEngine";
 
 export class Transaction extends TransactionBase<any, Transaction> {
